@@ -1,0 +1,47 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: url_shortener
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  fastapi:
+    build: .
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      DATABASE_URL: postgresql://user:${DB_PASSWORD}@postgres:5432/url_shortener
+      REDIS_URL: redis://redis:6379
+
+  celery:
+    build: .
+    command: celery -A app.tasks worker --loglevel=info
+    depends_on:
+      - redis
+      - postgres
+    environment:
+      DATABASE_URL: postgresql://user:${DB_PASSWORD}@postgres:5432/url_shortener
+      REDIS_URL: redis://redis:6379
+
+  celery-beat:
+    build: .
+    command: celery -A app.tasks beat --loglevel=info
+    depends_on:
+      - redis
+    environment:
+      REDIS_URL: redis://redis:6379
