@@ -155,4 +155,7 @@ MIT License - feel free to use this project for learning purposes.
 
 ---
 
-**Day 144-145**: Project setup and Docker configuration
+## 🧑‍💻 Author
+
+Marcos Vinicius Thibes Kemer
+
