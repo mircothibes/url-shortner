@@ -1,4 +1,4 @@
- """
+"""
 SQLAlchemy ORM Models for URL Shortener
 Production-grade models with validations and constraints
 """
@@ -18,9 +18,8 @@ from sqlalchemy import (
     Text,
     INET,
 )
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
 
@@ -35,7 +34,7 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(
-        UUID(as_uuid=True),
+        JSONB,
         primary_key=True,
         default=uuid4,
     )
@@ -75,7 +74,7 @@ class URL(Base):
     short_code = Column(String(10), unique=True, nullable=False, index=True)
     original_url = Column(Text, nullable=False)
     user_id = Column(
-        UUID(as_uuid=True),
+        String(36),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -107,7 +106,7 @@ class URL(Base):
     )
 
     # Relationships
-    user = relationship("User", back_populates="urls")
+    user = relationship("URL", back_populates="urls")
     clicks = relationship("Click", back_populates="url", cascade="all, delete-orphan")
 
     def __repr__(self):
@@ -221,7 +220,7 @@ class AuditLog(Base):
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     user_id = Column(
-        UUID(as_uuid=True),
+        String(36),
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
@@ -244,4 +243,4 @@ class AuditLog(Base):
     )
 
     def __repr__(self):
-        return f"<AuditLog(action={self.action}, resource={self.resource_type})>"   
+        return f"<AuditLog(action={self.action}, resource={self.resource_type})>"
