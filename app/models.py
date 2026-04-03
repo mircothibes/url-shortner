@@ -16,9 +16,8 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    INET,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, INET
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
@@ -34,9 +33,9 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(
-        JSONB,
+        String(36),
         primary_key=True,
-        default=uuid4,
+        default=lambda: str(uuid4()),
     )
     email = Column(String(255), unique=True, nullable=False, index=True)
     hashed_password = Column(String(255), nullable=False)
@@ -96,7 +95,7 @@ class URL(Base):
     password_hash = Column(String(255), nullable=True)
     description = Column(Text, nullable=True)
     tags = Column(JSONB, default=list, nullable=False)
-    metadata = Column(JSONB, default=dict, nullable=False)
+    custom_metadata = Column(JSONB, default=dict, nullable=False)
     total_clicks = Column(BigInteger, default=0, nullable=False)
 
     # Indexes
@@ -106,7 +105,7 @@ class URL(Base):
     )
 
     # Relationships
-    user = relationship("URL", back_populates="urls")
+    user = relationship("User", back_populates="urls")
     clicks = relationship("Click", back_populates="url", cascade="all, delete-orphan")
 
     def __repr__(self):
