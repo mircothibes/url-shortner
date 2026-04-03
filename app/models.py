@@ -13,11 +13,10 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
-    Integer,
     String,
     Text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, INET
+from sqlalchemy.dialects.postgresql import JSONB, INET, UUID
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
@@ -32,11 +31,7 @@ class User(Base):
 
     __tablename__ = "users"
 
-    id = Column(
-        String(36),
-        primary_key=True,
-        default=lambda: str(uuid4()),
-    )
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     email = Column(String(255), unique=True, nullable=False, index=True)
     hashed_password = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
@@ -73,7 +68,7 @@ class URL(Base):
     short_code = Column(String(10), unique=True, nullable=False, index=True)
     original_url = Column(Text, nullable=False)
     user_id = Column(
-        String(36),
+        UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -124,7 +119,7 @@ class URL(Base):
 
 
 # ============================================================================
-# CLICK MODEL (Partitioned by month)
+# CLICK MODEL
 # ============================================================================
 
 class Click(Base):
@@ -165,7 +160,7 @@ class Click(Base):
 
 
 # ============================================================================
-# CLICK AGGREGATE MODEL (Hourly summary)
+# CLICK AGGREGATE MODEL
 # ============================================================================
 
 class ClickAggregate(Base):
@@ -219,7 +214,7 @@ class AuditLog(Base):
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     user_id = Column(
-        String(36),
+        UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
@@ -243,3 +238,10 @@ class AuditLog(Base):
 
     def __repr__(self):
         return f"<AuditLog(action={self.action}, resource={self.resource_type})>"
+
+
+
+
+
+
+
