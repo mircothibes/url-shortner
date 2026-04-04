@@ -14,22 +14,31 @@ Base.metadata.create_all(bind=engine)
 SessionLocal = sessionmaker(bind=engine)
 db = SessionLocal()
 
-# Create test user
-test_user = User(
-    id=uuid4(),
-    email="test@example.com",
-    hashed_password="hashed_dummy_password",
-    api_key="test-api-key-12345678901234567890123456789012",
-    is_active=True,
-)
+# Check if user already exists
+existing_user = db.query(User).filter(User.email == "test@example.com").first()
 
-db.add(test_user)
-db.commit()
-db.refresh(test_user)
+if existing_user:
+    print(f"✅ User already exists!")
+    print(f"Email: {existing_user.email}")
+    print(f"API Key: {existing_user.api_key}")
+    print(f"User ID: {existing_user.id}")
+else:
+    # Create test user
+    test_user = User(
+        id=uuid4(),
+        email="test@example.com",
+        hashed_password="hashed_dummy_password",
+        api_key="test-api-key-12345678901234567890123456789012",
+        is_active=True,
+    )
 
-print(f"✅ User created successfully!")
-print(f"Email: {test_user.email}")
-print(f"API Key: {test_user.api_key}")
-print(f"User ID: {test_user.id}")
+    db.add(test_user)
+    db.commit()
+    db.refresh(test_user)
+
+    print(f"✅ User created successfully!")
+    print(f"Email: {test_user.email}")
+    print(f"API Key: {test_user.api_key}")
+    print(f"User ID: {test_user.id}")
 
 db.close()
