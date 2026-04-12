@@ -127,7 +127,7 @@ class Click(Base):
 
     __tablename__ = "clicks"
 
-    id = Column(BigInteger, primary_key=True)
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
     url_id = Column(
         BigInteger,
         ForeignKey("urls.id", ondelete="CASCADE"),
