@@ -138,7 +138,7 @@ class Click(Base):
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
-        primary_key=True,
+        index=True,
     )
     country = Column(String(2), nullable=True, index=True)
     region = Column(String(100), nullable=True)
