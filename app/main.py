@@ -4,7 +4,7 @@ from typing import Optional, List
 from uuid import UUID
 import secrets
 from fastapi import FastAPI, HTTPException, Depends, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel
@@ -167,7 +167,10 @@ async def redirect_to_original(short_code: str, request: Request, db: Session = 
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
-    return {"error": exc.detail, "status_code": exc.status_code}
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": exc.detail, "status_code": exc.status_code}
+    )
 
 if __name__ == "__main__":
     import uvicorn
