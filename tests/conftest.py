@@ -3,22 +3,22 @@
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 from fastapi.testclient import TestClient
 from uuid import uuid4
+import os
 
 from app.models import Base, User
 from app.main import app, get_db
 
-# Create in-memory SQLite database for testing
+# Use test database from environment or default
+TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", "postgresql://app_user:dev_password@localhost:5432/url_shortener_test")
+
 @pytest.fixture(scope="function")
 def test_db():
-    """Create a test database"""
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
+    """Create a test database session"""
+    engine = create_engine(TEST_DATABASE_URL)
+    
+    # Create all tables
     Base.metadata.create_all(bind=engine)
     
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -34,6 +34,7 @@ def test_db():
     
     yield db
     
+    # Cleanup
     db.close()
     Base.metadata.drop_all(bind=engine)
 
