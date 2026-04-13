@@ -42,7 +42,8 @@ def test_db():
 @pytest.fixture
 def client(test_db):
     """Create a test client"""
-    return TestClient(app)
+    from fastapi.testclient import TestClient as FC_TestClient
+    return TestClient(app=app)
 
 
 @pytest.fixture
