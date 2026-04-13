@@ -5,15 +5,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from uuid import uuid4
-import os
 
 from app.models import Base, User
 from app.main import app, get_db
 
-DATABASE_URL = os.getenv(
-    "TEST_DATABASE_URL",
-    "postgresql://app_user:dev_password@localhost:5432/url_shortener_test"
-)
+DATABASE_URL = "postgresql://app_user:dev_password@localhost:5432/url_shortener_test"
 
 @pytest.fixture(scope="function")
 def db_session():
