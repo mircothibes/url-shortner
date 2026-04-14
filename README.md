@@ -138,7 +138,7 @@ docker compose build
 - [x] Database configuration (PostgreSQL)
 - [x] Docker & Docker Compose
 - [ ] SQLAlchemy models (WIP)
-- [ ] Tests with pytest
+- [x] Tests with pytest
 - [ ] API authentication
 - [ ] Analytics aggregation
 - [ ] GCP deployment
