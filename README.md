@@ -139,7 +139,7 @@ docker compose build
 - [x] Docker & Docker Compose
 - [x] SQLAlchemy models (WIP)
 - [x] Tests with pytest
-- [] API authentication
+- [x] API authentication
 - [ ] Analytics aggregation
 - [ ] GCP deployment
 
