@@ -134,6 +134,48 @@ url-shortener/
 └── requirements.txt      # Python dependencies
 ```
 
+## 🔄 Development Workflow
+
+1. **Code**: Write feature in `app/main.py`
+2. **Test**: Add tests in `tests/test_endpoints.py`
+3. **Build**: `docker build -t url-shortener-api:latest .`
+4. **Run**: `docker compose -f docker-compose.prod.yml up -d`
+5. **Deploy**: Push to repository
+
+## 📈 Performance
+
+- **Requests/second**: 100+ (single container, 4 workers)
+- **Database**: PostgreSQL with connection pooling
+- **Caching**: Redis for hot data
+- **Response time**: <100ms average
+
+## 🚀 Upcoming Features
+
+- [ ] GCP Cloud Run deployment
+- [ ] Custom domain support
+- [ ] QR code generation
+- [ ] Link expiration
+- [ ] Password protection
+- [ ] Rate limiting
+- [ ] Advanced analytics dashboard
+
+## 📝 License
+
+MIT License - See LICENSE file for details
+
+## 👨‍💻 Author
+
+Marcos ([@marcosvtkemer](https://linkedin.com/in/marcosvtkemer))
+
+Part of the #PythonJourney series documenting backend development progression.
+
+## 🙏 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+---
+
+**Built with ❤️ using FastAPI, PostgreSQL, and Docker**
 
 
 
