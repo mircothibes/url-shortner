@@ -80,6 +80,125 @@ python create_test_user.py
 docker compose -f docker-compose.prod.yml up -d
 ```
 
+---
+
+## ⚡ Quick Start (5 minutes)
+
+### 1️⃣ Get Your API Key
+
+The test user is created automatically when you start the containers:
+
+```bash
+API_KEY="test-api-key-12345678901234567890123456789012"
+BASE_URL="http://localhost:8000"
+```
+
+### 2️⃣ Create Your First Short URL
+
+```bash
+curl -X POST $BASE_URL/api/v1/urls \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "original_url": "https://github.com/mircothibes",
+    "description": "My GitHub Profile"
+  }'
+```
+
+**Expected response:**
+```json
+{
+  "id": 1,
+  "short_code": "aBcDeF12",
+  "original_url": "https://github.com/mircothibes",
+  "created_at": "2026-04-17T19:03:38.050197Z",
+  "total_clicks": 0,
+  "is_active": true
+}
+```
+
+### 3️⃣ Use Your Short URL
+
+```bash
+# This will redirect to the original URL and record analytics
+curl -L $BASE_URL/aBcDeF12
+```
+
+### 4️⃣ List Your URLs
+
+```bash
+curl $BASE_URL/api/v1/urls \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+### 5️⃣ Check Analytics
+
+```bash
+curl $BASE_URL/api/v1/urls/1/analytics \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+**Response:**
+```json
+{
+  "total_clicks": 5,
+  "unique_visitors": 3,
+  "top_country": "BR",
+  "top_device": "Desktop",
+  "device_breakdown": {"Desktop": 3, "Mobile": 2},
+  "country_breakdown": {"BR": 5}
+}
+```
+
+### 6️⃣ Delete a URL
+
+```bash
+curl -X DELETE $BASE_URL/api/v1/urls/1 \
+  -H "Authorization: Bearer $API_KEY"
+```
+
+---
+
+## 🐍 Python Example
+
+```python
+import requests
+
+API_KEY = "test-api-key-12345678901234567890123456789012"
+BASE_URL = "http://localhost:8000"
+headers = {"Authorization": f"Bearer {API_KEY}"}
+
+# Create a short URL
+response = requests.post(
+    f"{BASE_URL}/api/v1/urls",
+    json={"original_url": "https://example.com"},
+    headers=headers
+)
+data = response.json()
+print(f"Short code: {data['short_code']}")
+
+# Get analytics
+analytics = requests.get(
+    f"{BASE_URL}/api/v1/urls/{data['id']}/analytics",
+    headers=headers
+).json()
+print(f"Total clicks: {analytics['total_clicks']}")
+```
+
+---
+
+## ❌ Common Errors & Solutions
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `401 Unauthorized` | Missing/invalid API key | Check your `Authorization` header |
+| `422 Validation Error` | Invalid URL format | Ensure URL starts with `http://` or `https://` |
+| `409 Conflict` | Custom slug already exists | Choose a different `custom_slug` |
+| `404 Not Found` | URL doesn't exist or wrong user | Verify the `url_id` belongs to your user |
+| `Connection refused` | Containers not running | Run `docker compose -f docker-compose.prod.yml up -d` |
+
+---
+
 ## 📚 API Endpoints
 
 ### Health Check
