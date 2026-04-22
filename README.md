@@ -276,11 +276,11 @@ url-shortener/
 ## 🚀 Upcoming Features
 
 - [ ] GCP Cloud Run deployment
-- [ ] Custom domain support
+- [x] Custom domain support
 - [ ] QR code generation
-- [ ] Link expiration
-- [ ] Password protection
-- [ ] Rate limiting
+- [x] Link expiration
+- [x] Password protection
+- [x] Rate limiting
 - [ ] Advanced analytics dashboard
 
 ## 📝 License
