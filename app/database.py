@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 # Get database URL from environment or use default
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://app_user:dev_password@localhost:5432/url_shortener"
+    "postgresql://app_user:dev_password@34.59.40.8:5432/url_shortener"
 )
 
 # Create engine
