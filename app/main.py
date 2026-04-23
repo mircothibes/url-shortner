@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from app.database import SessionLocal, engine
 from app.models import Base, User, URL, Click, AuditLog
 
-Base.metadata.create_all(bind=engine)
+#Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="URL Shortener API",
