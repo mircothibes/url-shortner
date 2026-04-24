@@ -82,20 +82,16 @@ async def get_current_user(request: Request, db: Session = Depends(get_db)) -> U
     return user.id
 
 
-@app.get(
-    "/health",
-    tags=["Health"],
-    summary="Health Check",
-    description="Verify API and database connectivity status"
-)
+@app.get("/health")
 async def health_check():
-    """Health check endpoint to verify API status and database connection"""
-    return {
-        "status": "ok",
-        "service": "URL Shortener API",
-        "database": "connected",
-        "version": "1.0.0"
-    }
+    return JSONResponse(
+        status_code=200,
+        content={
+            "status": "ok",
+            "service": "URL Shortener API",
+            "version": "1.0.0"
+        }
+    )
 
 
 @app.post(
