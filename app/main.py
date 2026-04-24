@@ -27,6 +27,9 @@ app = FastAPI(
     }
 )
 
+@app.get("/")
+async def root():
+    return {"message": "API is running"}
 
 class URLCreateRequest(BaseModel):
     original_url: str
