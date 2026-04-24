@@ -8,10 +8,13 @@ from fastapi.responses import RedirectResponse, JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel
-from app.database import SessionLocal, engine
+from app.database import SessionLocal
 from app.models import Base, User, URL, Click, AuditLog
 
-#Base.metadata.create_all(bind=engine)
+def get_engine():
+    from app.database import engine
+    return engine
+
 
 app = FastAPI(
     title="URL Shortener API",
