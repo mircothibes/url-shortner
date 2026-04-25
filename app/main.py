@@ -64,11 +64,14 @@ class AnalyticsResponse(BaseModel):
 
 
 def get_db():
-    db = SessionLocal()
     try:
-        yield db
-    finally:
-        db.close()
+        db = SessionLocal()
+        try:
+            yield db
+        finally:
+            db.close()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail="Database connection failed")
 
 
 async def get_current_user(request: Request, db: Session = Depends(get_db)) -> UUID:
