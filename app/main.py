@@ -89,8 +89,7 @@ def get_db():
     db = None
     try:
         db = SessionLocal()
-        # Test connection
-        db.execute(text("SELECT 1"))
+        
         yield db
     except Exception as e:
         raise HTTPException(
