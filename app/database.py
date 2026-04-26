@@ -1,8 +1,8 @@
 """Database configuration for URL Shortener API"""
 import os
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import NullPool
+from sqlalchemy.pool import StaticPool
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
@@ -11,12 +11,8 @@ DATABASE_URL = os.getenv(
 
 engine = create_engine(
     DATABASE_URL,
-    poolclass=NullPool
+    poolclass=StaticPool,
+    isolation_level="AUTOCOMMIT"
 )
 
-# Disable pre_ping completely
-@event.listens_for(engine, "connect")
-def receive_connect(dbapi_conn, connection_record):
-    pass
-
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal = sessionmaker(bind=engine)
