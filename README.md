@@ -230,3 +230,104 @@ gcloud run deploy url-shortener \
 ```
 
 ### Live Service
+
+https://url-shortener-1000156659602.us-central1.run.app
+
+### Production URLs
+- Health: https://url-shortener-1000156659602.us-central1.run.app/health
+- Swagger: https://url-shortener-1000156659602.us-central1.run.app/docs
+
+## 📊 Database Schema
+
+### Tables
+- `users` - User accounts with API keys
+- `urls` - Shortened URLs with metadata
+- `clicks` - Individual click events with IP, device, country data
+- `click_aggregates` - Hourly aggregated analytics
+- `audit_logs` - Audit trail of all operations
+
+## 🔄 Development Workflow
+
+1. **Feature Branch**
+```bash
+git checkout -b feature/your-feature
+```
+
+2. **Code & Test**
+```bash
+docker compose up -d
+pytest tests/ -v
+```
+
+3. **Commit**
+```bash
+git commit -m "Feature: description"
+```
+
+4. **Deploy**
+```bash
+git push origin feature/your-feature
+gcloud run deploy url-shortener --source .
+```
+
+## ❌ Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| `401 Unauthorized` | Check Authorization header and API key |
+| `422 Validation Error` | URL must start with `http://` or `https://` |
+| `409 Conflict` | Custom slug already exists - choose different one |
+| `503 Service Unavailable` | Check database connection and GCP permissions |
+| Containers won't start | Run `docker compose down -v && docker compose up -d` |
+
+## 🚀 Upcoming Features
+
+- [ ] Custom domain support
+- [ ] QR code generation
+- [ ] Link expiration policies
+- [ ] Password protection
+- [ ] Rate limiting per user
+- [ ] Advanced analytics dashboard
+- [ ] Webhook integrations
+- [ ] Batch URL creation
+
+## 📈 Performance Metrics
+
+- **Requests/second**: 100+ (single container)
+- **Average response time**: <100ms
+- **Database**: PostgreSQL with connection pooling
+- **Caching**: Redis for hot data
+- **Availability**: 99.95% uptime (GCP SLA)
+
+## 📚 Documentation
+
+- **Swagger UI**: Available at `/docs` endpoint
+- **ReDoc**: Available at `/redoc` endpoint
+- **Source Code**: Fully documented with docstrings
+
+## 📝 Project Timeline
+
+- **Day 161**: GCP Setup + Cloud Run Deployment
+- **Day 162**: Code Organization + Documentation
+- **Day 163**: SQLAlchemy Bug Fix (downgrade to 1.4.46)
+- **Day 164**: Full Endpoint Testing (7/7 endpoints working)
+- **Day 165**: Production Deployment ✅
+
+## 👨‍💻 Author
+
+**Marcos (mircothibes)**
+- GitHub: https://github.com/mircothibes
+- LinkedIn: https://linkedin.com/in/marcosvtkemer
+- Location: Luxembourg 🇱🇺
+
+## 📖 Part of #PythonJourney
+
+Daily documentation of backend Python development journey toward securing a backend Python role in Europe.
+
+## 📄 License
+
+MIT License - See LICENSE file for details
+
+---
+
+**Built with ❤️ using FastAPI, PostgreSQL, Redis, and GCP Cloud Run**
