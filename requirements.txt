@@ -7,3 +7,5 @@ redis==5.0.1
 celery==5.3.4
 httpx==0.24.1
 cloud-sql-python-connector==1.4.3
+passlib==1.7.4
+argon2-cffi==25.1.0
