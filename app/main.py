@@ -16,15 +16,18 @@ from pydantic import BaseModel, ConfigDict
 from app.database import SessionLocal
 from app.models import User, URL, Click, AuditLog
 
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
+
 
 # ============================================================================
-# FastAPI Application Setup
+# FastAPI Application Setu
 # ============================================================================
 
 app = FastAPI(
     title="URL Shortener API",
     description="Production-grade URL shortening service with advanced analytics and click tracking",
-    version="1.0.0",
+    version="1.0.0", 
     contact={
         "name": "Marcos (mircothibes)",
         "url": "https://github.com/mircothibes",
@@ -233,8 +236,8 @@ async def create_short_url(
     
     # Hash password if provided
     if request.password:
-        from passlib.context import CryptContext
-        pwd_context = CryptContext(schemes=["bcrypt"])
+        pwd_hasher = PasswordHasher()
+        hashed_password = pwd_hasher.hash(request.password)
         url.password_hash = pwd_context.hash(request.password)
     
     db.add(url)
@@ -470,8 +473,11 @@ async def redirect_to_original(
         if not password:
             raise HTTPException(status_code=401, detail="Password required")
         
-        from passlib.context import CryptContext
-        pwd_context = CryptContext(schemes=["bcrypt"])
+        pwd_hasher = PasswordHasher()
+        try:
+            pwd_hasher.verify(url.password_hash, password)
+        except VerifyMismatchError:
+            raise HTTPException(status_code=401, detail="Invalid password") 
         if not pwd_context.verify(password, url.password_hash):
             raise HTTPException(status_code=401, detail="Invalid password")
     
