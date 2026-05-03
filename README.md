@@ -285,8 +285,8 @@ gcloud run deploy url-shortener --source .
 - [ ] Custom domain support
 - [ ] QR code generation
 - [ ] Link expiration policies
-- [ ] Password protection
-- [ ] Rate limiting per user
+- [x] Password protection
+- [x] Rate limiting per user
 - [ ] Advanced analytics dashboard
 - [ ] Webhook integrations
 - [ ] Batch URL creation
