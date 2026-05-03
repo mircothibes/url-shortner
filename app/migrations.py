@@ -27,6 +27,8 @@ def create_missing_indexes():
     - idx_clicks_ip_address: For unique visitor counting
     - idx_clicks_url_clicked: For recent clicks analytics
     """
+    from app.database import SessionLocal
+    
     migrations = [
         {
             "name": "idx_clicks_ip_address",
@@ -40,20 +42,20 @@ def create_missing_indexes():
         },
     ]
     
-    connection = engine.connect()
+    db = SessionLocal()
     try:
         for migration in migrations:
             try:
                 print(f"Creating index: {migration['name']}")
                 print(f"  Description: {migration['description']}")
-                connection.execute(text(migration['sql']))
-                connection.commit()
+                db.execute(text(migration['sql']))
+                db.commit()
                 print(f"  ✅ Success\n")
             except Exception as e:
                 print(f"  ❌ Error: {str(e)}\n")
-                connection.rollback()
+                db.rollback()
     finally:
-        connection.close()
+        db.close()
 
 
 def analyze_tables():
@@ -68,21 +70,23 @@ def analyze_tables():
     - click_aggregates
     - audit_logs
     """
+    from app.database import SessionLocal
+    
     tables = ["users", "urls", "clicks", "click_aggregates", "audit_logs"]
     
-    connection = engine.connect()
+    db = SessionLocal()
     try:
         for table in tables:
             try:
                 print(f"Analyzing table: {table}")
-                connection.execute(text(f"ANALYZE {table};"))
-                connection.commit()
+                db.execute(text(f"ANALYZE {table};"))
+                db.commit()
                 print(f"  ✅ Success\n")
             except Exception as e:
                 print(f"  ❌ Error: {str(e)}\n")
-                connection.rollback()
+                db.rollback()
     finally:
-        connection.close()
+        db.close()
 
 
 def list_indexes():
