@@ -283,7 +283,7 @@ gcloud run deploy url-shortener --source .
 ## 🚀 Upcoming Features
 
 - [ ] Custom domain support
-- [ ] QR code generation
+- [x] QR code generation
 - [ ] Link expiration policies
 - [x] Password protection
 - [x] Rate limiting per user
