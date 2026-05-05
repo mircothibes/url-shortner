@@ -8,6 +8,7 @@ from uuid import UUID
 
 import secrets
 import io
+import os
 
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException, Depends, Request
@@ -28,11 +29,10 @@ from argon2.exceptions import VerifyMismatchError
 from app.qrcode import generate_qrcode_png
 
 from app.batch import BatchURLRequest, BatchURLResponse, BatchErrorResponse, validate_batch_request
-from datetime import datetime
 
 
 # ============================================================================
-# FastAPI Application Setu
+# FastAPI Application Setup
 # ============================================================================
 
 app = FastAPI(
@@ -50,10 +50,8 @@ app = FastAPI(
 # CORS Configuration
 # ============================================================================
 
-# Validate CORS configuration
 validate_cors_config()
 
-# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     **get_cors_config()
@@ -63,7 +61,6 @@ app.add_middleware(
 # Rate Limiting Configuration
 # ============================================================================
 
-# Register rate limiter
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_error_handler)
 
@@ -118,7 +115,6 @@ def get_db():
     try:        
         yield db
     except HTTPException:
-        # Re-raise HTTP exceptions without wrapping
         raise    
     except Exception as e:
         raise HTTPException(
@@ -208,8 +204,10 @@ async def health_check():
     summary="Create Shortened URL",
     description="Creates a new shortened URL with unique short code and optional customization"
 )
+@limiter.limit("100/15 minutes")
 async def create_short_url(
-    request: URLCreateRequest,
+    request: Request,
+    url_request: URLCreateRequest,
     db: Session = Depends(get_db),
     user_id: UUID = Depends(get_current_user)
 ):
@@ -223,7 +221,8 @@ async def create_short_url(
     - Tags and description for organization
     
     Args:
-        request: URL creation request data
+        request: FastAPI request object
+        url_request: URL creation request data
         db: Database session
         user_id: Authenticated user ID
         
@@ -233,21 +232,19 @@ async def create_short_url(
     Raises:
         HTTPException: If URL format is invalid or custom slug already exists
     """
-    original_url = request.original_url
+    original_url = url_request.original_url
     
-    # Validate URL format
     if not original_url.startswith(("http://", "https://")):
         raise HTTPException(
             status_code=422,
             detail="Invalid URL format. Must start with http:// or https://"
         )
     
-    # Handle custom slug or generate random short code
-    if request.custom_slug:
-        existing = db.query(URL).filter(URL.short_code == request.custom_slug).first()
+    if url_request.custom_slug:
+        existing = db.query(URL).filter(URL.short_code == url_request.custom_slug).first()
         if existing:
             raise HTTPException(status_code=409, detail="Custom slug already exists")
-        short_code = request.custom_slug
+        short_code = url_request.custom_slug
     else:
         while True:
             short_code = secrets.token_urlsafe(6)[:8]
@@ -255,26 +252,23 @@ async def create_short_url(
             if not existing:
                 break
     
-    # Create URL record
     url = URL(
         short_code=short_code,
         original_url=original_url,
         user_id=user_id,
-        expires_at=request.expires_at,
-        description=request.description,
-        tags=request.tags or []
+        expires_at=url_request.expires_at,
+        description=url_request.description,
+        tags=url_request.tags or []
     )
     
-    # Hash password if provided
-    if request.password:
+    if url_request.password:
         pwd_hasher = PasswordHasher()
-        url.password_hash = pwd_hasher.hash(request.password) 
+        url.password_hash = pwd_hasher.hash(url_request.password) 
     
     db.add(url)
     db.commit()
     db.refresh(url)
     
-    # Log audit event
     audit = AuditLog(
         user_id=user_id,
         action="CREATE_URL",
@@ -287,6 +281,185 @@ async def create_short_url(
     db.commit()
     
     return url
+
+
+@app.get(
+    "/api/v1/urls",
+    response_model=List[URLResponse],
+    tags=["URLs"],
+    summary="List User's URLs",
+    description="Returns all active shortened URLs created by the authenticated user"
+)
+@limiter.limit("300/15 minutes")
+async def list_user_urls(
+    request: Request,
+    db: Session = Depends(get_db),
+    user_id: UUID = Depends(get_current_user)
+):
+    """
+    List all shortened URLs for the authenticated user.
+    
+    Returns:
+        List[URLResponse]: User's active URLs, ordered by creation date (newest first)
+    """
+    urls = db.query(URL).filter(
+        URL.user_id == user_id,
+        URL.is_active == True
+    ).order_by(URL.created_at.desc()).all()
+    return urls
+
+
+@app.get(
+    "/api/v1/urls/{url_id}",
+    response_model=URLResponse,
+    tags=["URLs"],
+    summary="Get URL Details",
+    description="Retrieves detailed information about a specific shortened URL"
+)
+@limiter.limit("300/15 minutes")
+async def get_url_details(
+    request: Request,
+    url_id: int,
+    db: Session = Depends(get_db),
+    user_id: UUID = Depends(get_current_user)
+):
+    """
+    Get detailed information about a specific shortened URL.
+    
+    Args:
+        request: FastAPI request object
+        url_id: URL record ID
+        db: Database session
+        user_id: Authenticated user ID
+        
+    Returns:
+        URLResponse: URL details
+        
+    Raises:
+        HTTPException: If URL not found or doesn't belong to user
+    """
+    url = db.query(URL).filter(
+        URL.id == url_id,
+        URL.user_id == user_id
+    ).first()
+    
+    if not url:
+        raise HTTPException(status_code=404, detail="URL not found")
+    
+    return url
+
+
+@app.get(
+    "/api/v1/urls/{url_id}/qrcode",
+    tags=["URLs"],
+    summary="Get URL QR Code",
+    description="Generates and returns a QR code PNG image for the shortened URL"
+)
+@limiter.limit("300/15 minutes")
+async def get_qrcode(
+    request: Request,
+    url_id: int,
+    db: Session = Depends(get_db),
+    user_id: UUID = Depends(get_current_user)
+):
+    """
+    Generate and return QR code for a shortened URL.
+    
+    The QR code encodes the full shortened URL and can be scanned
+    with any QR code reader to access the link.
+    
+    Args:
+        request: FastAPI request object
+        url_id: URL record ID
+        db: Database session
+        user_id: Authenticated user ID
+        
+    Returns:
+        PNG image binary (image/png content type)
+        
+    Raises:
+        HTTPException: If URL not found or doesn't belong to user
+    """
+    url = db.query(URL).filter(
+        URL.id == url_id,
+        URL.user_id == user_id
+    ).first()
+    
+    if not url:
+        raise HTTPException(status_code=404, detail="URL not found")
+    
+    if os.getenv("ENVIRONMENT") == "production":
+        base_url = os.getenv("APP_URL", "https://your-domain.com")
+    else:
+        base_url = "http://localhost:8000"
+    
+    full_short_url = f"{base_url}/{url.short_code}"
+    
+    try:
+        qr_png = generate_qrcode_png(full_short_url)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate QR code: {str(e)}"
+        )
+    
+    return StreamingResponse(
+        io.BytesIO(qr_png),
+        media_type="image/png",
+        headers={"Content-Disposition": f"inline; filename=qrcode_{url.short_code}.png"}
+    )
+
+
+@app.delete(
+    "/api/v1/urls/{url_id}",
+    status_code=204,
+    tags=["URLs"],
+    summary="Delete URL",
+    description="Soft deletes a shortened URL by marking it as inactive"
+)
+@limiter.limit("300/15 minutes")
+async def delete_url(
+    request: Request,
+    url_id: int,
+    db: Session = Depends(get_db),
+    user_id: UUID = Depends(get_current_user)
+):
+    """
+    Delete a shortened URL (soft delete).
+    
+    The URL is marked as inactive rather than permanently deleted,
+    preserving analytics history.
+    
+    Args:
+        request: FastAPI request object
+        url_id: URL record ID
+        db: Database session
+        user_id: Authenticated user ID
+        
+    Raises:
+        HTTPException: If URL not found or doesn't belong to user
+    """
+    url = db.query(URL).filter(
+        URL.id == url_id,
+        URL.user_id == user_id
+    ).first()
+    
+    if not url:
+        raise HTTPException(status_code=404, detail="URL not found")
+    
+    url.is_active = False
+    db.commit()
+    
+    audit = AuditLog(
+        user_id=user_id,
+        action="DELETE_URL",
+        resource_type="URL",
+        resource_id=str(url_id),
+        details={"short_code": url.short_code}
+    )
+    db.add(audit)
+    db.commit()
+
 
 @app.post(
     "/api/v1/urls/batch",
@@ -324,7 +497,6 @@ async def create_batch_urls(
     Raises:
         HTTPException: If validation fails or database error
     """
-    # Validate entire batch before creating anything
     validation_result = validate_batch_request(batch_request)
     if not validation_result["valid"]:
         raise HTTPException(
@@ -335,11 +507,9 @@ async def create_batch_urls(
     created_urls = []
     
     try:
-        # Get all existing short codes to avoid duplicates
         existing_codes = db.query(URL.short_code).all()
         existing_codes = [code[0] for code in existing_codes]
         
-        # Generate all short codes upfront
         short_codes_needed = []
         for url_item in batch_request.urls:
             if url_item.custom_slug:
@@ -347,21 +517,16 @@ async def create_batch_urls(
             else:
                 short_codes_needed.append(None)
         
-        # Count how many need auto-generation
         auto_gen_count = sum(1 for code in short_codes_needed if code is None)
         
-        # Generate auto codes
         from app.batch import generate_short_codes
         auto_codes = generate_short_codes(auto_gen_count, existing_codes) if auto_gen_count > 0 else []
         
         auto_code_index = 0
         
-        # Create all URLs in transaction
         for idx, url_item in enumerate(batch_request.urls):
-            # Determine short code
             if short_codes_needed[idx]:
                 short_code = short_codes_needed[idx]
-                # Check if custom slug already exists
                 existing = db.query(URL).filter(URL.short_code == short_code).first()
                 if existing:
                     raise HTTPException(
@@ -372,7 +537,6 @@ async def create_batch_urls(
                 short_code = auto_codes[auto_code_index]
                 auto_code_index += 1
             
-            # Create URL record
             url = URL(
                 short_code=short_code,
                 original_url=url_item.original_url,
@@ -382,7 +546,6 @@ async def create_batch_urls(
                 tags=url_item.tags or []
             )
             
-            # Hash password if provided
             if url_item.password:
                 pwd_hasher = PasswordHasher()
                 url.password_hash = pwd_hasher.hash(url_item.password)
@@ -390,14 +553,11 @@ async def create_batch_urls(
             db.add(url)
             created_urls.append(url)
         
-        # Commit all at once (atomic transaction)
         db.commit()
         
-        # Refresh all URLs to get IDs
         for url in created_urls:
             db.refresh(url)
         
-        # Log audit event
         audit = AuditLog(
             user_id=user_id,
             action="CREATE_BATCH_URLS",
@@ -409,7 +569,6 @@ async def create_batch_urls(
         db.add(audit)
         db.commit()
         
-        # Build response
         return {
             "created": len(created_urls),
             "urls": [
@@ -417,11 +576,11 @@ async def create_batch_urls(
                     "id": url.id,
                     "short_code": url.short_code,
                     "original_url": url.original_url,
-                    "created_at": url.created_at.isoformat(),
+                    "created_at": url.created_at.isoformat() if url.created_at else "",
                     "is_active": url.is_active,
                     "expires_at": url.expires_at.isoformat() if url.expires_at else None,
-                    "description": url.description,
-                    "tags": url.tags
+                    "description": url.description or None,
+                    "tags": url.tags or None
                 }
                 for url in created_urls
             ]
@@ -437,179 +596,6 @@ async def create_batch_urls(
             detail=f"Failed to create batch: {str(e)}"
         )
 
-@app.get(
-    "/api/v1/urls",
-    response_model=List[URLResponse],
-    tags=["URLs"],
-    summary="List User's URLs",
-    description="Returns all active shortened URLs created by the authenticated user"
-)
-async def list_user_urls(
-    db: Session = Depends(get_db),
-    user_id: UUID = Depends(get_current_user)
-):
-    """
-    List all shortened URLs for the authenticated user.
-    
-    Returns:
-        List[URLResponse]: User's active URLs, ordered by creation date (newest first)
-    """
-    urls = db.query(URL).filter(
-        URL.user_id == user_id,
-        URL.is_active == True
-    ).order_by(URL.created_at.desc()).all()
-    return urls
-
-
-@app.get(
-    "/api/v1/urls/{url_id}",
-    response_model=URLResponse,
-    tags=["URLs"],
-    summary="Get URL Details",
-    description="Retrieves detailed information about a specific shortened URL"
-)
-async def get_url_details(
-    url_id: int,
-    db: Session = Depends(get_db),
-    user_id: UUID = Depends(get_current_user)
-):
-    """
-    Get detailed information about a specific shortened URL.
-    
-    Args:
-        url_id: URL record ID
-        db: Database session
-        user_id: Authenticated user ID
-        
-    Returns:
-        URLResponse: URL details
-        
-    Raises:
-        HTTPException: If URL not found or doesn't belong to user
-    """
-    url = db.query(URL).filter(
-        URL.id == url_id,
-        URL.user_id == user_id
-    ).first()
-    
-    if not url:
-        raise HTTPException(status_code=404, detail="URL not found")
-    
-    return url
-
-@app.get(
-    "/api/v1/urls/{url_id}/qrcode",
-    tags=["URLs"],
-    summary="Get URL QR Code",
-    description="Generates and returns a QR code PNG image for the shortened URL"
-)
-async def get_qrcode(
-    url_id: int,
-    db: Session = Depends(get_db),
-    user_id: UUID = Depends(get_current_user)
-):
-    """
-    Generate and return QR code for a shortened URL.
-    
-    The QR code encodes the full shortened URL and can be scanned
-    with any QR code reader to access the link.
-    
-    Args:
-        url_id: URL record ID
-        db: Database session
-        user_id: Authenticated user ID
-        
-    Returns:
-        PNG image binary (image/png content type)
-        
-    Raises:
-        HTTPException: If URL not found or doesn't belong to user
-    """
-    # Verify URL exists and belongs to user
-    url = db.query(URL).filter(
-        URL.id == url_id,
-        URL.user_id == user_id
-    ).first()
-    
-    if not url:
-        raise HTTPException(status_code=404, detail="URL not found")
-    
-    # Build full shortened URL (use Cloud Run domain in production)
-    # For development, use localhost
-    import os
-    if os.getenv("ENVIRONMENT") == "production":
-        # In production, use your actual domain
-        base_url = os.getenv("APP_URL", "https://your-domain.com")
-    else:
-        # In development, use localhost
-        base_url = "http://localhost:8000"
-    
-    full_short_url = f"{base_url}/{url.short_code}"
-    
-    # Generate QR code
-    try:
-        qr_png = generate_qrcode_png(full_short_url)
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to generate QR code: {str(e)}"
-        )
-    
-    # Return PNG image with correct headers
-    return StreamingResponse(
-        io.BytesIO(qr_png),
-        media_type="image/png",
-        headers={"Content-Disposition": f"inline; filename=qrcode_{url.short_code}.png"}
-    )
-
-@app.delete(
-    "/api/v1/urls/{url_id}",
-    status_code=204,
-    tags=["URLs"],
-    summary="Delete URL",
-    description="Soft deletes a shortened URL by marking it as inactive"
-)
-async def delete_url(
-    url_id: int,
-    db: Session = Depends(get_db),
-    user_id: UUID = Depends(get_current_user)
-):
-    """
-    Delete a shortened URL (soft delete).
-    
-    The URL is marked as inactive rather than permanently deleted,
-    preserving analytics history.
-    
-    Args:
-        url_id: URL record ID
-        db: Database session
-        user_id: Authenticated user ID
-        
-    Raises:
-        HTTPException: If URL not found or doesn't belong to user
-    """
-    url = db.query(URL).filter(
-        URL.id == url_id,
-        URL.user_id == user_id
-    ).first()
-    
-    if not url:
-        raise HTTPException(status_code=404, detail="URL not found")
-    
-    url.is_active = False
-    db.commit()
-    
-    # Log audit event
-    audit = AuditLog(
-        user_id=user_id,
-        action="DELETE_URL",
-        resource_type="URL",
-        resource_id=str(url_id),
-        details={"short_code": url.short_code}
-    )
-    db.add(audit)
-    db.commit()
-
 
 # ============================================================================
 # Analytics Endpoints
@@ -622,7 +608,9 @@ async def delete_url(
     summary="Get URL Analytics",
     description="Retrieves comprehensive analytics and statistics for a specific shortened URL"
 )
+@limiter.limit("300/15 minutes")
 async def get_analytics(
+    request: Request,
     url_id: int,
     db: Session = Depends(get_db),
     user_id: UUID = Depends(get_current_user)
@@ -638,6 +626,7 @@ async def get_analytics(
     - Geographic distribution
     
     Args:
+        request: FastAPI request object
         url_id: URL record ID
         db: Database session
         user_id: Authenticated user ID
@@ -656,10 +645,8 @@ async def get_analytics(
     if not url:
         raise HTTPException(status_code=404, detail="URL not found")
     
-    # Fetch all clicks for this URL
     clicks = db.query(Click).filter(Click.url_id == url_id).all()
     
-    # Build device and country breakdowns
     device_breakdown = {}
     country_breakdown = {}
     
@@ -669,11 +656,9 @@ async def get_analytics(
         if click.country:
             country_breakdown[click.country] = country_breakdown.get(click.country, 0) + 1
     
-    # Get top values
     top_country = max(country_breakdown, key=country_breakdown.get) if country_breakdown else None
     top_device = max(device_breakdown, key=device_breakdown.get) if device_breakdown else None
     
-    # Count unique visitors by IP
     unique_ips = db.query(func.count(func.distinct(Click.ip_address))).filter(
         Click.url_id == url_id
     ).scalar() or 0
@@ -693,6 +678,7 @@ async def get_analytics(
 # ============================================================================
 
 @app.get("/{short_code}", tags=["Redirects"])
+@limiter.limit("1000/15 minutes")
 async def redirect_to_original(
     short_code: str,
     request: Request,
@@ -720,9 +706,7 @@ async def redirect_to_original(
             pwd_hasher.verify(url.password_hash, password)
         except VerifyMismatchError:
             raise HTTPException(status_code=401, detail="Invalid password") 
-       
     
-    # Record click
     ip_addr = "127.0.0.1"
     if request.client and request.client.host not in ["testclient"]:
         ip_addr = str(request.client.host)
