@@ -5,8 +5,8 @@ Implements validation before creation (fail-fast approach).
 """
 
 import secrets
-from typing import List, Dict, Any
-from pydantic import BaseModel, validator
+from typing import List, Dict, Any, Optional
+from pydantic import BaseModel, validator 
 
 
 # ============================================================================
@@ -98,10 +98,13 @@ class BatchURLItemResponse(BaseModel):
     original_url: str
     created_at: str
     is_active: bool
-    expires_at: str = None
-    description: str = None
-    tags: List[str] = None
+    expires_at: Optional[str] = None 
+    description: Optional[str] = None 
+    tags: Optional[List[str]] = None    
 
+    class Config:
+        from_attributes = True
+   
 
 class BatchURLResponse(BaseModel):
     """Batch URL creation response"""
