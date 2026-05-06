@@ -239,7 +239,84 @@ class AuditLog(Base):
     def __repr__(self):
         return f"<AuditLog(action={self.action}, resource={self.resource_type})>"
 
+# ============================================================================
+# WEBHOOK MODEL
+# ============================================================================
 
+class Webhook(Base):
+    """User webhook configuration for event notifications"""
+
+    __tablename__ = "webhooks"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    url = Column(Text, nullable=False)
+    events = Column(JSONB, default=list, nullable=False)  # ["url.clicked", "url.created", etc]
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
+    secret = Column(String(64), nullable=False)  # For HMAC signature verification
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+        index=True,
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    last_triggered_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Relationships
+    user = relationship("User", backref="webhooks")
+    logs = relationship("WebhookLog", back_populates="webhook", cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<Webhook(id={self.id}, user_id={self.user_id}, url={self.url})>"
+
+
+# ============================================================================
+# WEBHOOK LOG MODEL
+# ============================================================================
+
+class WebhookLog(Base):
+    """Log of webhook delivery attempts"""
+
+    __tablename__ = "webhook_logs"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    webhook_id = Column(
+        BigInteger,
+        ForeignKey("webhooks.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    event_type = Column(String(50), nullable=False)  # "url.clicked", "url.created", etc
+    event_data = Column(JSONB, nullable=False)  # The actual event payload
+    http_status = Column(BigInteger, nullable=True)  # Response status code
+    response_body = Column(Text, nullable=True)  # Response from webhook endpoint
+    error_message = Column(Text, nullable=True)  # Error details if failed
+    attempt_number = Column(BigInteger, default=1, nullable=False)
+    success = Column(Boolean, default=False, nullable=False, index=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+        index=True,
+    )
+    next_retry_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Relationships
+    webhook = relationship("Webhook", back_populates="logs")
+
+    def __repr__(self):
+        return f"<WebhookLog(webhook_id={self.webhook_id}, event_type={self.event_type}, success={self.success})>"
 
 
 
