@@ -29,7 +29,17 @@ from argon2.exceptions import VerifyMismatchError
 from app.qrcode import generate_qrcode_png
 
 from app.batch import BatchURLRequest, BatchURLResponse, BatchErrorResponse, validate_batch_request
-
+from app.webhooks import (
+    WebhookCreateRequest,
+    WebhookResponse,
+    WebhookLogResponse,
+    generate_webhook_secret,
+    create_webhook_signature,
+    deliver_webhook,
+    calculate_next_retry,
+    URLClickedEvent
+)
+from app.models import Webhook, WebhookLog
 
 # ============================================================================
 # FastAPI Application Setup
@@ -672,6 +682,287 @@ async def get_analytics(
         "country_breakdown": country_breakdown
     }
 
+# ============================================================================
+# Webhook Endpoints
+# ============================================================================
+
+@app.post(
+    "/api/v1/webhooks",
+    status_code=201,
+    response_model=WebhookResponse,
+    tags=["Webhooks"],
+    summary="Create Webhook",
+    description="Register a webhook to receive event notifications"
+)
+@limiter.limit("100/15 minutes")
+async def create_webhook(
+    request: Request,
+    webhook_request: WebhookCreateRequest,
+    db: Session = Depends(get_db),
+    user_id: UUID = Depends(get_current_user)
+):
+    """
+    Create a webhook to receive event notifications.
+    
+    Supported events:
+    - url.created: When a URL is created
+    - url.clicked: When a URL is accessed
+    - url.expired: When a URL expires
+    - url.deleted: When a URL is deleted
+    
+    The webhook will receive POST requests with:
+    - X-Webhook-Signature header (HMAC-SHA256)
+    - X-Webhook-Event header (event type)
+    - JSON payload with event data
+    
+    Args:
+        request: FastAPI request object
+        webhook_request: Webhook creation request
+        db: Database session
+        user_id: Authenticated user ID
+        
+    Returns:
+        WebhookResponse: Created webhook data
+        
+    Raises:
+        HTTPException: If webhook URL is invalid or user already has too many
+    """
+    # Check webhook count per user (max 10)
+    webhook_count = db.query(Webhook).filter(
+        Webhook.user_id == user_id
+    ).count()
+    
+    if webhook_count >= 10:
+        raise HTTPException(
+            status_code=429,
+            detail="Maximum 10 webhooks per user"
+        )
+    
+    # Create webhook with secret
+    webhook = Webhook(
+        user_id=user_id,
+        url=str(webhook_request.url),
+        events=webhook_request.events,
+        secret=generate_webhook_secret()
+    )
+    
+    db.add(webhook)
+    db.commit()
+    db.refresh(webhook)
+    
+    # Log audit event
+    audit = AuditLog(
+        user_id=user_id,
+        action="CREATE_WEBHOOK",
+        resource_type="WEBHOOK",
+        resource_id=str(webhook.id),
+        ip_address=request.client.host if hasattr(request, 'client') else None,
+        details={"webhook_url": str(webhook_request.url), "events": webhook_request.events}
+    )
+    db.add(audit)
+    db.commit()
+    
+    return {
+        "id": webhook.id,
+        "url": webhook.url,
+        "events": webhook.events,
+        "is_active": webhook.is_active,
+        "created_at": webhook.created_at.isoformat(),
+        "last_triggered_at": webhook.last_triggered_at.isoformat() if webhook.last_triggered_at else None
+    }
+
+
+@app.get(
+    "/api/v1/webhooks",
+    response_model=List[WebhookResponse],
+    tags=["Webhooks"],
+    summary="List User's Webhooks",
+    description="Returns all webhooks registered by the authenticated user"
+)
+@limiter.limit("300/15 minutes")
+async def list_webhooks(
+    request: Request,
+    db: Session = Depends(get_db),
+    user_id: UUID = Depends(get_current_user)
+):
+    """
+    List all webhooks for the authenticated user.
+    
+    Returns:
+        List[WebhookResponse]: User's webhooks
+    """
+    webhooks = db.query(Webhook).filter(
+        Webhook.user_id == user_id
+    ).order_by(Webhook.created_at.desc()).all()
+    
+    return [
+        {
+            "id": w.id,
+            "url": w.url,
+            "events": w.events,
+            "is_active": w.is_active,
+            "created_at": w.created_at.isoformat(),
+            "last_triggered_at": w.last_triggered_at.isoformat() if w.last_triggered_at else None
+        }
+        for w in webhooks
+    ]
+
+
+@app.get(
+    "/api/v1/webhooks/{webhook_id}",
+    response_model=WebhookResponse,
+    tags=["Webhooks"],
+    summary="Get Webhook Details",
+    description="Retrieves details about a specific webhook"
+)
+@limiter.limit("300/15 minutes")
+async def get_webhook(
+    request: Request,
+    webhook_id: int,
+    db: Session = Depends(get_db),
+    user_id: UUID = Depends(get_current_user)
+):
+    """
+    Get details about a specific webhook.
+    
+    Args:
+        request: FastAPI request object
+        webhook_id: Webhook ID
+        db: Database session
+        user_id: Authenticated user ID
+        
+    Returns:
+        WebhookResponse: Webhook details
+        
+    Raises:
+        HTTPException: If webhook not found or doesn't belong to user
+    """
+    webhook = db.query(Webhook).filter(
+        Webhook.id == webhook_id,
+        Webhook.user_id == user_id
+    ).first()
+    
+    if not webhook:
+        raise HTTPException(status_code=404, detail="Webhook not found")
+    
+    return {
+        "id": webhook.id,
+        "url": webhook.url,
+        "events": webhook.events,
+        "is_active": webhook.is_active,
+        "created_at": webhook.created_at.isoformat(),
+        "last_triggered_at": webhook.last_triggered_at.isoformat() if webhook.last_triggered_at else None
+    }
+
+
+@app.delete(
+    "/api/v1/webhooks/{webhook_id}",
+    status_code=204,
+    tags=["Webhooks"],
+    summary="Delete Webhook",
+    description="Deletes a webhook"
+)
+@limiter.limit("300/15 minutes")
+async def delete_webhook(
+    request: Request,
+    webhook_id: int,
+    db: Session = Depends(get_db),
+    user_id: UUID = Depends(get_current_user)
+):
+    """
+    Delete a webhook.
+    
+    Args:
+        request: FastAPI request object
+        webhook_id: Webhook ID
+        db: Database session
+        user_id: Authenticated user ID
+        
+    Raises:
+        HTTPException: If webhook not found or doesn't belong to user
+    """
+    webhook = db.query(Webhook).filter(
+        Webhook.id == webhook_id,
+        Webhook.user_id == user_id
+    ).first()
+    
+    if not webhook:
+        raise HTTPException(status_code=404, detail="Webhook not found")
+    
+    db.delete(webhook)
+    db.commit()
+    
+    # Log audit event
+    audit = AuditLog(
+        user_id=user_id,
+        action="DELETE_WEBHOOK",
+        resource_type="WEBHOOK",
+        resource_id=str(webhook_id),
+        ip_address=request.client.host if hasattr(request, 'client') else None,
+        details={"webhook_url": webhook.url}
+    )
+    db.add(audit)
+    db.commit()
+
+
+@app.get(
+    "/api/v1/webhooks/{webhook_id}/logs",
+    response_model=List[WebhookLogResponse],
+    tags=["Webhooks"],
+    summary="Get Webhook Delivery Logs",
+    description="Returns delivery attempt logs for a specific webhook"
+)
+@limiter.limit("300/15 minutes")
+async def get_webhook_logs(
+    request: Request,
+    webhook_id: int,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    user_id: UUID = Depends(get_current_user)
+):
+    """
+    Get delivery logs for a specific webhook.
+    
+    Args:
+        request: FastAPI request object
+        webhook_id: Webhook ID
+        limit: Maximum number of logs to return (max 100)
+        db: Database session
+        user_id: Authenticated user ID
+        
+    Returns:
+        List[WebhookLogResponse]: Delivery logs
+        
+    Raises:
+        HTTPException: If webhook not found or doesn't belong to user
+    """
+    # Verify webhook exists and belongs to user
+    webhook = db.query(Webhook).filter(
+        Webhook.id == webhook_id,
+        Webhook.user_id == user_id
+    ).first()
+    
+    if not webhook:
+        raise HTTPException(status_code=404, detail="Webhook not found")
+    
+    limit = min(limit, 100)  # Cap at 100
+    
+    logs = db.query(WebhookLog).filter(
+        WebhookLog.webhook_id == webhook_id
+    ).order_by(WebhookLog.created_at.desc()).limit(limit).all()
+    
+    return [
+        {
+            "id": log.id,
+            "event_type": log.event_type,
+            "success": log.success,
+            "http_status": log.http_status,
+            "attempt_number": log.attempt_number,
+            "created_at": log.created_at.isoformat(),
+            "error_message": log.error_message
+        }
+        for log in logs
+    ]
 
 # ============================================================================
 # Redirect Endpoint (Catch-all)
